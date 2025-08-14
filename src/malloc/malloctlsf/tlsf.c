@@ -1,6 +1,6 @@
-#include "tlsf.h"
-#include "platform_utils.h"
-#include "tlsf_debug.h"
+#include "tlsf/tlsf.h"
+#include "tlsf/platform_utils.h"
+#include "tlsf/tlsf_debug.h"
 #include <string.h>
 
 TLSF_DEBUG_INDENT(int indent_tlsf = 0);

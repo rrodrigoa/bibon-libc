@@ -1,6 +1,5 @@
 #ifndef PLATFORM_UTILS_H
 #define PLATFORM_UTILS_H
-    
     #include <stdint.h>
     #include <assert.h>
     #include <stdarg.h>

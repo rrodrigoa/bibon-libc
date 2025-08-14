@@ -1,11 +1,11 @@
-#include "platform_utils.h"
+#include "tlsf/platform_utils.h"
 
 void debug_log_tlsf(const char* func, int line, int indent, const char* fmt, ...) {
     char msg[1024]; 
     int offset = 0;
 
     for (int i = 0; i < indent && offset < (int)sizeof(msg)-1; i++){
-        msg[offset++] = '    ';
+        msg[offset++] = ' ';
     }
 
     offset += snprintf(msg + offset, sizeof(msg) - offset, "[%s:%d] ", func, line);
