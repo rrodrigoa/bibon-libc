@@ -8,28 +8,26 @@
 TLSF_DEBUG_INDENT(int indent_tlsf = 0);
 
 // Request a new memory block from OS - SYSCALL
-void *TLSF_RequestOSMemoryBlock(size_t size) {
-    uint32_t sizeInBytes = (uint32_t)(1 << size);
-
+void *TLSF_RequestOSMemoryBlock(size_t *sizeInBytes) {
     if (sizeInBytes <= 0) {
         return NULL;
     }
 
-    void *firstBlockMemory =
-        tlsf_mmap(sizeInBytes + sizeof(struct BlockHeader));
+    // Up cast the sizeInBytes to the next power of 2 size
+    *sizeInBytes = _nextPowerOfTwo(*sizeInBytes);
+
+    void *firstBlockMemory = tlsf_mmap(*sizeInBytes + sizeof(struct BlockHeader));
     if (firstBlockMemory == NULL) {
         return NULL;
     }
-    memset(firstBlockMemory, 0, sizeof(struct ControlBlock));
+    memset(firstBlockMemory, 0, sizeof(struct BlockHeader));
 
-    TLSF_DEBUG_LOG(indent_tlsf, "Memory allocated size %d in %p", size,
-                   firstBlockMemory);
+    TLSF_DEBUG_LOG(indent_tlsf, "Memory allocated size %d in %p", size, firstBlockMemory);
     return firstBlockMemory;
 }
 
 // Add an existing block of memory to control block
-void TLSF_AddMemoryBlock(struct ControlBlock *control, void *firstBlockMemory,
-                         size_t sizeInBytes) {
+void TLSF_AddMemoryBlock(struct ControlBlock *control, void *firstBlockMemory, size_t sizeInBytes) {
     if (firstBlockMemory == NULL || sizeInBytes == 0 || control == NULL) {
         return;
     }
@@ -83,17 +81,14 @@ void *TLSF_malloc(struct ControlBlock *control, size_t size) {
 
     struct BlockHeader *free_block = _find_suitable_block(control, &fl, &sl);
 
-    if (free_block == NULL ||
-        free_block->size - sizeof(struct BlockHeader) < bytes) {
-        TLSF_DEBUG_LOG(indent_tlsf,
-                       "Cannot return a valid block, returning NULL");
+    if (free_block == NULL || free_block->size - sizeof(struct BlockHeader) < bytes) {
+        TLSF_DEBUG_LOG(indent_tlsf, "Cannot return a valid block, returning NULL");
         return NULL;
     }
 
     _remove_head(control, &fl, &sl);
     if (_block_size(free_block) - bytes > (uint32_t)TLSF_SPLIT_THRESHOLD) {
-        struct BlockHeader *remaining_block =
-            (struct BlockHeader *)_split(free_block, &bytes);
+        struct BlockHeader *remaining_block = (struct BlockHeader *)_split(free_block, &bytes);
         _mapping_insert(remaining_block, &fl, &sl);
         _insert_block(control, remaining_block, &fl, &sl);
     }
@@ -102,13 +97,11 @@ void *TLSF_malloc(struct ControlBlock *control, size_t size) {
     uint8_t *pointer = (uint8_t *)free_block;
     pointer += sizeof(struct BlockHeader);
 
-    TLSF_DEBUG_LOG(indent_tlsf, "Return a valid memory block on address %p",
-                   pointer);
+    TLSF_DEBUG_LOG(indent_tlsf, "Return a valid memory block on address %p", pointer);
     return (void *)pointer;
 }
 
-void *TLSF_realloc(struct ControlBlock *control, void *address,
-                   size_t new_size) {
+void *TLSF_realloc(struct ControlBlock *control, void *address, size_t new_size) {
     if (new_size == 0) {
         TLSF_DEBUG_LOG(indent_tlsf, "Returning null");
         return NULL;
@@ -257,8 +250,7 @@ void _insert_block(struct ControlBlock *control, struct BlockHeader *block,
     }
 }
 
-void _insert_pool_block(struct ControlBlock *control, struct BlockHeader *block,
-                        const uint32_t *fl, const uint32_t *sl) {
+void _insert_pool_block(struct ControlBlock *control, struct BlockHeader *block, const uint32_t *fl, const uint32_t *sl) {
     block->previousPhysicalBlock = NULL;
     block->nextFreeBlock = NULL;
     block->previousFreeBlock = NULL;
@@ -279,7 +271,7 @@ void _mapping_search(uint32_t *bytes, uint32_t *fl, uint32_t *sl) {
         return;
     }
 
-    unsigned long indexLeft;
+    unsigned long indexLeft = 0;
     _bit_scan_reverse_32((unsigned long)*bytes, &indexLeft);
 
     *bytes += (1 << (indexLeft - TLSF_J)) - 1;
@@ -288,11 +280,10 @@ void _mapping_search(uint32_t *bytes, uint32_t *fl, uint32_t *sl) {
     *sl = (*bytes >> (*fl - TLSF_J)) - TLSF_2_POWER_J;
 }
 
-struct BlockHeader *_find_suitable_block(struct ControlBlock *control,
-                                         uint32_t *fl, uint32_t *sl) {
+struct BlockHeader *_find_suitable_block(struct ControlBlock *control, uint32_t *fl, uint32_t *sl) {
     uint32_t bitmap_temp = control->sl_bitmap[*fl] & ((uint32_t)(~0) << *sl);
     uint32_t non_empty_sl, non_empty_fl;
-    unsigned long longNumber;
+    unsigned long longNumber = 0;
 
     if (bitmap_temp != 0) {
         _bit_scan_forward_32((unsigned long)bitmap_temp, &longNumber);
@@ -314,8 +305,7 @@ struct BlockHeader *_find_suitable_block(struct ControlBlock *control,
     return block;
 }
 
-void _remove_head(struct ControlBlock *control, const uint32_t *fl,
-                  const uint32_t *sl) {
+void _remove_head(struct ControlBlock *control, const uint32_t *fl, const uint32_t *sl) {
     struct BlockHeader *head = control->blocks[*fl][*sl];
     struct BlockHeader *headNext = head->nextFreeBlock;
 
@@ -352,13 +342,11 @@ struct BlockHeader *_split(struct BlockHeader *block, const uint32_t *bytes) {
     uint8_t *pointerToNewAddress = (uint8_t *)block;
     pointerToNewAddress += sizeof(struct BlockHeader) + *bytes;
 
-    struct BlockHeader *remaining_block =
-        (struct BlockHeader *)pointerToNewAddress;
+    struct BlockHeader *remaining_block = (struct BlockHeader *)pointerToNewAddress;
     memset(remaining_block, 0, sizeof(struct BlockHeader));
 
     bool T = _is_last_physical_block(block);
-    remaining_block->size =
-        _block_size(block) - sizeof(struct BlockHeader) - *bytes;
+    remaining_block->size = _block_size(block) - sizeof(struct BlockHeader) - *bytes;
     block->size = *bytes;
 
     if (T) {
@@ -396,7 +384,8 @@ struct BlockHeader *_merge_prev(struct ControlBlock *control,
 
     if (prevBlock != NULL && _is_free_block(prevBlock) &&
         prevBlock != control) {
-        uint32_t fl, sl;
+        uint32_t fl = 0;
+        uint32_t sl = 0;
         _mapping_insert(prevBlock, &fl, &sl);
         _remove_block(control, prevBlock, &fl, &sl);
         _merge(prevBlock, block);
@@ -409,12 +398,12 @@ struct BlockHeader *_merge_prev(struct ControlBlock *control,
 
 struct BlockHeader *_merge_next(struct ControlBlock *control,
                                 struct BlockHeader *block) {
-    uint8_t *pointer =
-        ((uint8_t *)block) + sizeof(struct BlockHeader) + block->size;
+    uint8_t *pointer = ((uint8_t *)block) + sizeof(struct BlockHeader) + block->size;
     struct BlockHeader *nextBlock = (struct BlockHeader *)pointer;
 
     if (_is_last_physical_block(block) == false && _is_free_block(nextBlock)) {
-        uint32_t fl, sl;
+        uint32_t fl = 0;
+        uint32_t sl = 0;
         _mapping_insert(nextBlock, &fl, &sl);
         _remove_block(control, nextBlock, &fl, &sl);
         _merge(block, nextBlock);
@@ -424,8 +413,7 @@ struct BlockHeader *_merge_next(struct ControlBlock *control,
 }
 
 void _merge(struct BlockHeader *prevBlock, struct BlockHeader *block) {
-    prevBlock->size =
-        prevBlock->size + sizeof(struct BlockHeader) + block->size;
+    prevBlock->size = prevBlock->size + sizeof(struct BlockHeader) + block->size;
 
     if (_is_last_physical_block(block) == false) {
         struct BlockHeader *nextPhysicalBlock =
@@ -450,6 +438,19 @@ uint8_t *_align_up(uint8_t *address, size_t alignment) {
     return (uint8_t *)aligned_address;
 }
 
+size_t _nextPowerOfTwo(size_t sizeInBytes) {
+    if (sizeInBytes <= 1u) {
+        return 1u;
+    }
+    if (sizeInBytes > 0x80000000u) {
+        return 0u;
+    }
+
+    unsigned long scan = 0;
+    _bit_scan_reverse_64(sizeInBytes - 1u, &scan);
+    return 1u << (scan + 1);
+}
+
 struct ControlBlock *processSharedControlBlock = NULL;
 
 void TLSF_INIT() {
@@ -467,11 +468,10 @@ void *__libc_malloc(size_t size) {
     if (mem == NULL) {
 #ifdef TLSF_ALLOW_SYSCALL_ALLOCATION
         size_t total_size = size + TLSF_MIN_BLOCK_CREATION;
-        void *newBlock = TLSF_RequestOSMemoryBlock(total_size);
+        void *newBlock = TLSF_RequestOSMemoryBlock(&total_size);
         TLSF_AddMemoryBlock(processSharedControlBlock, newBlock, total_size);
         mem = TLSF_malloc(processSharedControlBlock, size);
-#endif /* ifdef TLSF_ALLOW_SYSCALL_ALLOCATION                                  \
-        */
+#endif /* ifdef TLSF_ALLOW_SYSCALL_ALLOCATION */
     }
     return mem;
 }
@@ -493,6 +493,10 @@ void *__libc_memalign(size_t size, size_t align) {
 }
 
 void __libc_free(void *ptr) {
+    if (ptr == NULL) {
+        return;
+    }
+
     TLSF_INIT();
     TLSF_free(processSharedControlBlock, ptr);
 }

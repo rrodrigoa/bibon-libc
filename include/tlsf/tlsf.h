@@ -26,23 +26,23 @@
 static bool TLSF_Initialized = false;
 
 struct BlockHeader {
-        struct BlockHeader *previousPhysicalBlock;
-        uint32_t size;
-        uint32_t bitMask;
-        struct BlockHeader *nextFreeBlock;
-        struct BlockHeader *previousFreeBlock;
+    struct BlockHeader *previousPhysicalBlock;
+    uint32_t size;
+    uint32_t bitMask;
+    struct BlockHeader *nextFreeBlock;
+    struct BlockHeader *previousFreeBlock;
 };
 
 struct ControlBlock {
-        struct BlockHeader *block_null;
-        uint32_t fl_bitmap;
-        uint32_t sl_bitmap[FL_BITMAP_SIZE];
+    struct BlockHeader *block_null;
+    uint32_t fl_bitmap;
+    uint32_t sl_bitmap[FL_BITMAP_SIZE];
 
-        // The blocks of memory allocated for the pool
-        struct BlockHeader *blocks[FL_BITMAP_SIZE][SL_BITMAP_SIZE];
+    // The blocks of memory allocated for the pool
+    struct BlockHeader *blocks[FL_BITMAP_SIZE][SL_BITMAP_SIZE];
 };
 
-void *RequestOSMemoryBlock(size_t size);
+void *RequestOSMemoryBlock(size_t sizeInBytes);
 void TLSF_AddMemoryBlock(struct ControlBlock *control, void *firstBlockMemroy,
                          size_t sizeInBytes);
 
@@ -101,6 +101,8 @@ struct BlockHeader *_get_block_from_pointer(void *address);
 void _set_aligned_block(struct BlockHeader *block, bool value);
 bool _is_aligned_block(struct BlockHeader *block);
 uint8_t *_align_up(uint8_t *address, size_t alignment);
+
+size_t _nextPowerOfTwo(size_t sizeInBytes);
 
 void *__libc_malloc(size_t size);
 void *__libc_calloc(size_t nmeb, size_t size);
